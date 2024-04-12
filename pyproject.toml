@@ -16,6 +16,7 @@ astroquery = "^0.4.7"
 asyncio = "^3.4.3"
 tqdm = "^4.66.2"
 lxml = "^5.2.1"
+toml = "^0.10.2"
 
 
 [tool.poetry.group.dev.dependencies]
