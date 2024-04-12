@@ -1,4 +1,4 @@
-<a href="https://github.com/tessgi/tessproposaltool/actions/workflows/tests.yml"><img src="https://github.com/tessgi/tessproposaltool/workflows/pytest/badge.svg" alt="Test status"/></a> [![Generic badge](https://img.shields.io/badge/documentation-live-blue.svg)](https://tessgi.github.io/tessproposaltool/)
+<a href="https://github.com/tessgi/tessproposaltool/actions/workflows/tests.yml"><img src="https://github.com/tessgi/tessproposaltool/workflows/pytest/badge.svg" alt="Test status"/></a> [!
 [![PyPI version](https://badge.fury.io/py/tessproposaltool.svg)](https://badge.fury.io/py/tessproposaltool)
 
 # TESS Proposal Tool
