@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "tessproposaltool"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 readme = "README.md"
 packages = [{include = "tessproposaltool", from = "src"}]
+include = ["pyproject.toml"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -17,7 +18,6 @@ asyncio = "^3.4.3"
 tqdm = "^4.66.2"
 lxml = "^5.2.1"
 toml = "^0.10.2"
-
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"
