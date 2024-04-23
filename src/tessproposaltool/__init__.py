@@ -7,21 +7,12 @@ import sys
 import time
 from threading import Event, Thread
 
-import toml
 from rich.console import Console
 from rich.logging import RichHandler  # noqa: E402
 
 PACKAGEDIR = os.path.dirname(os.path.abspath(__file__))
 
-
-def get_version():
-    pyproject_content = toml.load(
-        "/".join(PACKAGEDIR.split("/")[:-2]) + "/pyproject.toml"
-    )
-    return pyproject_content["tool"]["poetry"]["version"]
-
-
-__version__ = get_version()
+__version__ = "0.1.2"
 
 
 def get_logger():
