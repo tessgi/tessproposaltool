@@ -149,16 +149,22 @@ async def xmatch(dataframe, max_entries=50, radius=2, concurrency=5):
     return dataframe.join(pd.concat(results))
 
 
+def _file2df(input):
+    # Assume is a filename
+    if input.endswith("csv"):
+        input = pd.read_csv(input, comment="#")
+    elif input.endswith("xlsx"):
+        input = pd.read_excel(input)
+    else:
+        raise ValueError("Can not parse file extension.")
+    return input
+
+
 def _parse_dataframe(input):
     logger.debug("Parsing dataframe columns")
     if isinstance(input, str):
-        # Assume is a filename
-        if input.endswith("csv"):
-            input = pd.read_csv(input, comment="#")
-        elif input.endswith("xlsx"):
-            input = pd.read_excel(input)
-        else:
-            raise ValueError("Can not parse file extension.")
+        input = _file2df(input)
+
     if isinstance(input, pd.DataFrame):
         cols = np.asarray(input.columns)
         rename_dict = {}
@@ -293,7 +299,12 @@ def create_target_list(
 ):
     # original _parse_dataframe downselects user colums.  This is usefull for filling tics but problematic for target lists
     # we'll differentiate here and not modify parse to preserve current functionality.  WE could modify # TODO
+
+    if isinstance(user_df, str):
+        user_df = _file2df(user_df)
+
     input_df = _parse_dataframe(user_df)
+
     new_dfs = []
     if input_df.tic.isnull().any():
         ticless = input_df.loc[input_df.tic.isnull()]
