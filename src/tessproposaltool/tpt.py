@@ -38,6 +38,7 @@ RENAME_OPTIONS = {
 TARGETLIST_OPTIONS = {
     "name": ["common_name", "common", "name"],
     "extended": ["extended", "extended_flag", "sg", "s'/'g", "s''g"],
+    "special_handling": ["special_handling", "special", "handling"],
     "20s_request": [
         "20s_request",
         "20s",
@@ -48,6 +49,15 @@ TARGETLIST_OPTIONS = {
     "swift_request": ["swift_request", "swift", "swiftrequest", "swift-request"],
     "nicer_request": ["nicer_request", "nicer", "nicerrequest", "nicer-request"],
     "remarks": ["remarks", "comments", "notes"],
+}
+TARGETLIST_DEFAULTS = {
+    "name": pd.NA,
+    "extended": "N",
+    "special_handling": "N",
+    "20s_request": "N",
+    "swift_request": pd.NA,
+    "nicer_request": pd.NA,
+    "remarks": pd.NA,
 }
 
 
@@ -226,6 +236,27 @@ def fill_tics(
 
 def to_csv(target_list, filename="target_list.csv"):
     """Takes a dataframe of target information from tpt and writes an ark-compatible target-list in csv format.
+    We parse the input text file for potential optional columns.
+        - We have some sort of dictionary for a bunch of potnential column names
+        - We need documentation for what these names might be.
+            - alternatively we can enforce a strict column order and no names
+            - people will inevitably screw this up so we'll need type checking here instead maybe?
+        - If an optional column isn't present we throw a warning
+            - in that warning we saying describe the column that is missing and relevant column name(s) we accept
+        - If a user supplies a column that isn't recognized we throw an error
+            - we proibably require that a user have column name/labels in their csb
+        - we potentially(?) omit any optional columns in the output table that are not supplied
+        - this is more rubust to ark submissions but probably more annoying to the user
+            - it may require being somewhat "fiddly" for input csvs
+        - the "default" proposal will have the MOST warnings
+        - this is more annoying to code
+            -  conditional logic, name matching
+            -  we'll have to track and assign more columns from the input df to the output df along the matched rows
+
+    ** use lksearch to make giving a list of tics a valid input option**
+    ** can include separation, contrast under remarks **
+    ** tuning inputs for good crossmatch or everything? **
+    ** how to send warnings to Rebekah? **
 
     Required Columns Returned:
         -   TIC ID (if available)
@@ -250,69 +281,19 @@ def to_csv(target_list, filename="target_list.csv"):
         DataFrame of information from tpt
     filename : str
         name of the csv file to write to
-    """
 
     """
-    How do we want to handle optional columns?
-    Two options?
-        1. No optional inputs taken, a "default" target list is returned
-            - we only ever allow up 3 columns of input - ra, dec, tmag
-            - Assume default value for all Optional is 0/None - e.g. most basic 20s proposal.
-            - ALL optional columns will be output, with a default value.    
-            - User recieves this target list then customizes to their use case
-            - We display some warning text that describes the default values and when/how a user should modify.
-            - This is dangerous because it may be no loneger ark compatible if a user reads/writes the file
-            - this is the "easiest" user option for the default 120s target proposal
-
-        1.5 - Check Boxes set values across all columns
-            
-        2. We parse the input text file for potential optional columns.  
-            - We have some sort of dictionary for a bunch of potnential column names  
-            - We need documentation for what these names might be.  
-                - alternatively we can enforce a strict column order and no names
-                - people will inevitably screw this up so we'll need type checking here instead maybe?
-            - If an optional column isn't present we throw a warning 
-                - in that warning we saying describe the column that is missing and relevant column name(s) we accept
-            - If a user supplies a column that isn't recognized we throw an error
-                - we proibably require that a user have column name/labels in their csb
-            - we potentially(?) omit any optional columns in the output table that are not supplied
-            - this is more rubust to ark submissions but probably more annoying to the user 
-                - it may require being somewhat "fiddly" for input csvs
-            - the "default" proposal will have the MOST warnings
-            - this is more annoying to code 
-                -  conditional logic, name matching
-                -  we'll have to track and assign more columns from the input df to the output df along the matched rows
-        
-        ** use lksearch to make giving a list of tics a valid input option**
-        ** can include separation, contrast under remarks **
-        ** tuning inputs for good crossmatch or everything? ** 
-        ** how to send warnings to Rebekah? **
-    """
-    required_columns = [
-        "tic",
-        "ra",
-        "dec",
-        "pmra",
-        "pmde",
-        "tmag",
-    ]
-    required_keys = [col in target_list.keys() for col in required_columns]
-    if any(~required_keys):
-        logger.error(
-            f"Missing Required Columns for a valid target list in Output DataFrame: {required_columns[~required_keys]}"
-        )
-
-    target_list.to_csv(filename, index=False)
 
 
 def create_target_list(
-    input_df,
-    write_file=False,
+    user_df,
+    write_file=True,
     filename="target_list.csv",
     include_questionable_crossmatch=True,
 ):
-    input_df = _parse_dataframe(input_df)
-    # TODO some thing recursion parse mixed list
+    # original _parse_dataframe downselects user colums.  This is usefull for filling tics but problematic for target lists
+    # we'll differentiate here and not modify parse to preserve current functionality.  WE could modify # TODO
+    input_df = _parse_dataframe(user_df)
     new_dfs = []
     if input_df.tic.isnull().any():
         ticless = input_df.loc[input_df.tic.isnull()]
@@ -329,9 +310,30 @@ def create_target_list(
             logger.warning(
                 "TIC and ra/dec supplied: ignoring RA, DEC and using TIC to construct target list"
             )
-        # TODO this should work for "TIC XXX" "XXX" XXX
+        # This should work for "TIC XXX" "XXX" XXX
+        # TODO Test - I think TIC XXX might break do to the need to re-sort indices on TIC, check?
         tic_df = query_id(ticfull.tic.astype(int).to_list(), output_catalog="tic")
-        tic_df.index = ticfull.index
+
+        # TODO lksearch.catalog.search.query_id returns items in a different order than input
+        # PR should go in to fix this, in the mean time, sort this list.
+        new_index = np.zeros(len(tic_df))
+        # astroquery does not return files in the same order they are delivered
+        # We'll match the files downloaded here and re-create the index
+        for i in range(len(new_index)):
+            loc = ticfull["tic"].astype(int) == tic_df.iloc[i]["TIC"].astype(int)
+            ind = ticfull.index[loc]
+            ind = np.atleast_1d(ind)
+            if len(ind) > 1:
+                # Numpy deprecation warning - indexing with a 1 element array
+                # For safety we'll make sure everything is at least a 1 element array and then grab the first item
+                # To make sure there's not multiple matching items we'll make sure the length is not >1
+                logger.exception(
+                    "Multiple files in table matched in the download manifest"
+                )
+            new_index[i] = ind[0]
+            tic_df.index = new_index
+        tic_df.sort_index()
+
         tic_df = _parse_dataframe(tic_df)
         new_dfs.append(tic_df[OUTPUT_COLUMNS])
 
@@ -339,7 +341,7 @@ def create_target_list(
     if len(new_dfs) == 0:
         logger.exception("Cannot Retrieve ANY TIC values for supplied dataframe")
     else:
-        new_df = pd.concat(new_dfs).sort_index()
+        targetlist_df = pd.concat(new_dfs).sort_index()
 
     # Merge extra columns from the input file onto the columns from the TIC
     # parse_input is strippid columns so the below isn't adding in the remaining
@@ -347,18 +349,34 @@ def create_target_list(
     # new_df = new_df.join(input_df[input_df.columns.difference(new_df.columns)])
 
     for key, item in TARGETLIST_OPTIONS.items():
-        cols = np.asarray(input_df.columns)
-        rename_dict = {}
-        renamed_cols = []
-        if np.any([c.lower().strip() in item for c in cols]):
-            rename_dict[[c for c in cols if c.lower().strip() in item][0]] = key
-            renamed_cols.append(key)
+        cols = np.asarray(user_df.columns)
+        col_match = [c.lower().strip() in item for c in cols]
+        if np.any(col_match):
+            targetlist_df[key] = user_df[user_df.columns[col_match]]
         else:
-            logger.debug(f"`{key}` not in input dataframe.")  # Use a default key value
+            logger.warning(
+                f"`{key}` not in input dataframe - assuming default of {TARGETLIST_DEFAULTS[key]}"
+            )  # Use a default key value
+            targetlist_df[key] = TARGETLIST_DEFAULTS[key]
 
     if write_file:
-        to_csv(new_df, filename=filename)
-    return new_df
+        # required_columns = TIC_COLUMNS
+        # required_keys = [col in targetlist_df.keys() for col in required_columns]
+        # print(required_keys)
+        # if any(required_keys):
+        #    logger.error(
+        #        f"Missing Required Columns for a valid target list in Output DataFrame: {required_columns[~required_keys]}"
+        #    )
+        # optional_columns = TARGETLIST_OPTIONS.keys()
+        # optional_keys = [col in targetlist_df.keys() for col in optional_columns]
+        # print(optional_keys)
+        # if any(not optional_keys):
+        #    logger.error(
+        #        f"Missing Optional Column (which should have been added) for a valid target list in Output DataFrame: {optional_columns[~optional_keys]}"
+        #    )
+        targetlist_df.to_csv(filename, index=False)
+
+    return targetlist_df
 
 
 def tpt(args=None):
