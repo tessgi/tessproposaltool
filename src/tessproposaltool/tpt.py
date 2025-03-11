@@ -262,7 +262,8 @@ def fill_tics(
 
 def to_csv(target_list, filename="target_list.csv"):
     """Takes a dataframe of target information from tpt and writes an ark-compatible target-list in csv format.
-    We parse the input text file for potential optional columns.
+
+     We parse the input text file for potential optional columns.
         - We have some sort of dictionary for a bunch of potnential column names
         - We need documentation for what these names might be.
             - alternatively we can enforce a strict column order and no names
@@ -311,12 +312,56 @@ def to_csv(target_list, filename="target_list.csv"):
     """
 
 
+def _validate_df(targetlist_df):
+    # Enforce Typing
+    for key in TARGETLIST_REQUIRED_TYPES.keys():
+        try:
+            targetlist_df[key] = targetlist_df[key].astype(
+                TARGETLIST_REQUIRED_TYPES[key]
+            )
+        except ValueError:
+            logger.exception(
+                f"Cannot force {key} to be {TARGETLIST_REQUIRED_TYPES[key]} in: {targetlist_df[key]}"
+            )
+
+    for key in TARGETLIST_OPTIONAL_TYPES.keys():
+        ind = targetlist_df[key].notnull()
+        if any(ind):
+            try:
+                targetlist_df.loc[ind, key] = targetlist_df.loc[ind, key].astype(
+                    TARGETLIST_OPTIONAL_TYPES[key]
+                )
+            except ValueError:
+                logger.exception(
+                    f"Cannot force {key} to be {TARGETLIST_OPTIONAL_TYPES[key]} in: {targetlist_df[key]}"
+                )
+    return targetlist_df
+
+
 def create_target_list(
     user_df,
     write_file=True,
     filename="target_list.csv",
     include_questionable_crossmatch=True,
 ):
+    """_summary_
+
+    Parameters
+    ----------
+    user_df : DataFrame, string
+        dataframe or file path of input
+    write_file : bool, optional
+        Whether or not to save the output targetlist as a file, by default True
+    filename : str, optional
+       name of the file to save, by default "target_list.csv"
+    include_questionable_crossmatch : bool, optional
+        _description_, by default True
+
+    Returns
+    -------
+    DataFrame
+        Dataframe containing the output TargetList
+    """
     # original _parse_dataframe downselects user colums.  This is usefull for filling tics but problematic for target lists
     # we'll differentiate here and not modify parse to preserve current functionality.  WE could modify # TODO
 
@@ -393,28 +438,8 @@ def create_target_list(
             )  # Use a default key value
             targetlist_df[key] = TARGETLIST_DEFAULTS[key]
 
-    # Enforce Typing
-    for key in TARGETLIST_REQUIRED_TYPES.keys():
-        try:
-            targetlist_df[key] = targetlist_df[key].astype(
-                TARGETLIST_REQUIRED_TYPES[key]
-            )
-        except:
-            logger.exception(
-                f"Cannot force {key} to be {TARGETLIST_REQUIRED_TYPES[key]} in: {targetlist_df[key]}"
-            )
-
-    for key in TARGETLIST_OPTIONAL_TYPES.keys():
-        ind = targetlist_df[key].notnull()
-        if any(ind):
-            try:
-                targetlist_df.loc[ind, key] = targetlist_df.loc[ind, key].astype(
-                    TARGETLIST_OPTIONAL_TYPES[key]
-                )
-            except:
-                logger.exception(
-                    f"Cannot force {key} to be {TARGETLIST_OPTIONAL_TYPES[key]} in: {targetlist_df[key]}"
-                )
+    # flake8 complained
+    targetlist_df = _validate_df(targetlist_df)
 
     if write_file:
         # required_columns = TIC_COLUMNS
@@ -429,7 +454,8 @@ def create_target_list(
         # print(optional_keys)
         # if any(not optional_keys):
         #    logger.error(
-        #        f"Missing Optional Column (which should have been added) for a valid target list in Output DataFrame: {optional_columns[~optional_keys]}"
+        #        f"Missing Optional Column (which should have been added) for a valid target list
+        #           in Output DataFrame: {optional_columns[~optional_keys]}"
         #    )
         targetlist_df.to_csv(filename, index=False)
 
