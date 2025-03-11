@@ -61,6 +61,26 @@ TARGETLIST_DEFAULTS = {
 }
 
 
+TARGETLIST_REQUIRED_TYPES = {
+    "tic": int,
+    "ra": float,
+    "dec": float,
+    "pmra": float,
+    "pmde": float,
+    "tmag": float,
+}
+
+TARGETLIST_OPTIONAL_TYPES = {
+    "name": str,
+    "extended": str,
+    "special_handling": str,
+    "20s_request": str,
+    "swift_request": float,
+    "nicer_request": float,
+    "remarks": str,
+}
+
+
 # Assume this function is the asynchronous version of `launch_job`
 async def async_launch_job(tap, query, upload_resource, upload_table_name):
     # Simulate asynchronous behavior (e.g., using aiohttp)
@@ -364,11 +384,37 @@ def create_target_list(
         col_match = [c.lower().strip() in item for c in cols]
         if np.any(col_match):
             targetlist_df[key] = user_df[user_df.columns[col_match]]
+            if key in ["extended", "special_handling", "20s_request"]:
+                targetlist_df[key] = targetlist_df[key].str.strip().str.upper()
+
         else:
             logger.warning(
                 f"`{key}` not in input dataframe - assuming default of {TARGETLIST_DEFAULTS[key]}"
             )  # Use a default key value
             targetlist_df[key] = TARGETLIST_DEFAULTS[key]
+
+    # Enforce Typing
+    for key in TARGETLIST_REQUIRED_TYPES.keys():
+        try:
+            targetlist_df[key] = targetlist_df[key].astype(
+                TARGETLIST_REQUIRED_TYPES[key]
+            )
+        except:
+            logger.exception(
+                f"Cannot force {key} to be {TARGETLIST_REQUIRED_TYPES[key]} in: {targetlist_df[key]}"
+            )
+
+    for key in TARGETLIST_OPTIONAL_TYPES.keys():
+        ind = targetlist_df[key].notnull()
+        if any(ind):
+            try:
+                targetlist_df.loc[ind, key] = targetlist_df.loc[ind, key].astype(
+                    TARGETLIST_OPTIONAL_TYPES[key]
+                )
+            except:
+                logger.exception(
+                    f"Cannot force {key} to be {TARGETLIST_OPTIONAL_TYPES[key]} in: {targetlist_df[key]}"
+                )
 
     if write_file:
         # required_columns = TIC_COLUMNS

@@ -8,16 +8,16 @@ packages = [{include = "tessproposaltool", from = "src"}]
 include = ["pyproject.toml"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9 < 4.0.0"
 rich = "^13.7.1"
 numpy = "^1.26.4"
 pandas = "^2.2.2"
 astropy = "^6.0.1"
-astroquery = "^0.4.7"
+astroquery = ">0.4.7"
 asyncio = "^3.4.3"
 tqdm = "^4.66.2"
 lxml = "^5.2.1"
-lksearch = "> 1.1.0"
+lksearch = ">= 1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"

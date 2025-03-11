@@ -72,3 +72,33 @@ def test_inputs():
         assert length
         assert complete
         assert correct_order
+
+
+def test_optional_columns():
+    testfile = testdir + "test6.csv"
+
+    optional_columns = [
+        "name",
+        "extended",
+        "special_handling",
+        "20s_request",
+        "swift_request",
+        "nicer_request",
+        "remarks",
+    ]
+
+    test_df = create_target_list(testfile)
+    for col in optional_columns:
+        assert col in test_df.columns
+    i_y = [0, 2]
+    i_n = [1, 3, 4, 5]
+    for i in i_y:
+        assert test_df.iloc[i]["20s_request"] == "Y"
+    for i in i_n:
+        assert test_df.iloc[i]["20s_request"] == "N"
+    assert all(test_df["extended"] == "N")
+    assert all(test_df["special_handling"] == "N")
+
+    assert test_df.name.isnull().all()
+    assert test_df.swift_request.isnull().all()
+    assert test_df.nicer_request.isnull().all()
