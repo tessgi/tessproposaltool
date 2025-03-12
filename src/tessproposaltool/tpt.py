@@ -23,10 +23,25 @@ from . import _sync_call  # noqa
 from . import get_logger
 
 logger = get_logger()
-
+# columns to return from the fill_tics crossmatch
+CROSSMATCH_COLUMNS = [
+    "TIC",
+    "RA",
+    "DEC",
+    "pmRA",
+    "pmDEC",
+    "Tmag",
+    "sep",
+    "weight",
+    "mweight",
+]
+# Columns from the TIC Catalog we want
 TIC_COLUMNS = ["TIC", "RA", "DEC", "pmRA", "pmDEC", "Tmag"]
+# Columns we accept as input
 INPUT_COLUMNS = ["tic", "ra", "dec", "tmag"]
+# Required Output Columns
 OUTPUT_COLUMNS = ["tic", "ra", "dec", "pmra", "pmde", "tmag"]
+# Rename options for the required columns
 RENAME_OPTIONS = {
     "tic": ["tic", "tic_id", "id", "ticid", "tic_number", "tic_no", "#"],
     "ra": ["ra", "j2000ra", "raj2000"],
@@ -35,6 +50,7 @@ RENAME_OPTIONS = {
     "pmde": ["pmde", "pmDE", "pmDEC", "pmdec"],
     "tmag": ["tmag", "tessmag", "mag", "vmag"],
 }
+# Rename options for the optional columns
 TARGETLIST_OPTIONS = {
     "name": ["common_name", "common", "name"],
     "extended": ["extended", "extended_flag", "sg", "s'/'g", "s''g"],
@@ -50,6 +66,7 @@ TARGETLIST_OPTIONS = {
     "nicer_request": ["nicer_request", "nicer", "nicerrequest", "nicer-request"],
     "remarks": ["remarks", "comments", "notes"],
 }
+# default values for optional columns if they are not specified
 TARGETLIST_DEFAULTS = {
     "name": pd.NA,
     "extended": "N",
@@ -60,7 +77,8 @@ TARGETLIST_DEFAULTS = {
     "remarks": pd.NA,
 }
 
-
+# preferred type for the required columns
+# they do not need to be this on intput, but must be castable to this type
 TARGETLIST_REQUIRED_TYPES = {
     "tic": int,
     "ra": float,
@@ -70,6 +88,8 @@ TARGETLIST_REQUIRED_TYPES = {
     "tmag": float,
 }
 
+# preferred type for the optional columns
+# they do not need to be this on intput, but must be castable to this type
 TARGETLIST_OPTIONAL_TYPES = {
     "name": str,
     "extended": str,
@@ -149,8 +169,9 @@ async def _xmatch_chunk(dataframe, task_number, radius=2, semaphore=None):
         r = (
             r.sort_values(["index", "mweight"], ascending=False)
             .drop_duplicates(subset=["index"], keep="first")
-            .set_index("index")[TIC_COLUMNS]
+            .set_index("index")
         )
+        r = r[CROSSMATCH_COLUMNS]
     return r
 
 
@@ -202,9 +223,29 @@ def _parse_dataframe(input):
         raise ValueError("Can not parse input.")
 
 
-def fill_tics(
-    dataframe, concurrency=5, parse_input=True, include_questionable_crossmatch=True
-):
+def fill_tics(dataframe, concurrency=5, parse_input=True):
+    """
+    Fills tic values using a positional crossmatch with a combined magnitude, positional weighted algorithm
+
+    crossmatch parameters:
+    separation: pixel fraction
+    mweight:POWER(10, ABS(input.tmag - tic.Tmag) * -0.4) as mweight
+    weight: (1 / sepweight) * 1 / mweight
+
+    Parameters
+    ----------
+    dataframe : DataFrame
+        input DataFrame of ra, dec, (tmag) to crossmatch and fill with TIC ids
+    concurrency : int, optional
+        parrallization of async TIC queries, by default 5
+    parse_input : bool, optional
+       parse an input file or data-frame to make it conform to tpt standards, by default True
+
+    Returns
+    -------
+    df : Data Frame
+        DataFrame of crossmatched TIC RESULTS to return
+    """
     logger.debug("Crossmatching nan TICs")
     if parse_input:
         df = _parse_dataframe(dataframe)[INPUT_COLUMNS]
@@ -249,67 +290,18 @@ def fill_tics(
     iterate(5, 4)
     # Radius = 4 pixel
     iterate(1, 4)
-
     # This was throwing a setting with copy warning for me,
     # but this is using loc as per best practice and seems to be working
     # so catching & ignoring for now
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=SettingWithCopyWarning)
         df.loc[tic_df.index, OUTPUT_COLUMNS] = np.asarray(tic_df[TIC_COLUMNS])
+        for row in tic_df.iterrows():
+            df.loc[row[0], "xmatch"] = (
+                f"Crossmatch Parameters: separation: {row[1]["sep"]} weight: {row[1]["weight"]} | mweight:  {row[1]["mweight"]}"
+            )
     logger.stop_spinner()
-    return df[OUTPUT_COLUMNS]
-
-
-def to_csv(target_list, filename="target_list.csv"):
-    """Takes a dataframe of target information from tpt and writes an ark-compatible target-list in csv format.
-
-     We parse the input text file for potential optional columns.
-        - We have some sort of dictionary for a bunch of potnential column names
-        - We need documentation for what these names might be.
-            - alternatively we can enforce a strict column order and no names
-            - people will inevitably screw this up so we'll need type checking here instead maybe?
-        - If an optional column isn't present we throw a warning
-            - in that warning we saying describe the column that is missing and relevant column name(s) we accept
-        - If a user supplies a column that isn't recognized we throw an error
-            - we proibably require that a user have column name/labels in their csb
-        - we potentially(?) omit any optional columns in the output table that are not supplied
-        - this is more rubust to ark submissions but probably more annoying to the user
-            - it may require being somewhat "fiddly" for input csvs
-        - the "default" proposal will have the MOST warnings
-        - this is more annoying to code
-            -  conditional logic, name matching
-            -  we'll have to track and assign more columns from the input df to the output df along the matched rows
-
-    ** use lksearch to make giving a list of tics a valid input option**
-    ** can include separation, contrast under remarks **
-    ** tuning inputs for good crossmatch or everything? **
-    ** how to send warnings to Rebekah? **
-
-    Required Columns Returned:
-        -   TIC ID (if available)
-        -   Right Ascension (decimal degrees)
-        -   Declination (decimal degrees)
-        -   Proper motion in Right Ascension (mas/yr)
-        -   Proper motion in Declination (mas/yr)
-        -   TESS mag
-
-    Optional Columns Returned with default:
-        -   Common name of target
-        -   Extended flag (Is this S/G?  do we want to auto set this?)
-        -   Special handling flag
-        -   20-second cadence flag
-        -   Swift time request (ksec)
-        -   Nicer time request (ksec)
-        -   Remarks
-
-    Parameters
-    ----------
-    target_list : `~pandas.DataFrame`
-        DataFrame of information from tpt
-    filename : str
-        name of the csv file to write to
-
-    """
+    return df
 
 
 def _validate_df(targetlist_df):
@@ -338,13 +330,83 @@ def _validate_df(targetlist_df):
     return targetlist_df
 
 
+def _sort_tic_df(ticfull, tic_df):
+    # TODO lksearch.catalog.search.query_id returns items in a different order than input
+    # PR should go in to fix this, in the mean time, sort this list.
+    new_index = np.zeros(len(tic_df))
+    # astroquery does not return files in the same order they are delivered
+    # We'll match the files downloaded here and re-create the index
+    for i in range(len(new_index)):
+        loc = ticfull["tic"].astype(int) == tic_df.iloc[i]["TIC"].astype(int)
+        ind = ticfull.index[loc]
+        ind = np.atleast_1d(ind)
+        if len(ind) > 1:
+            # Numpy deprecation warning - indexing with a 1 element array
+            # For safety we'll make sure everything is at least a 1 element array and then grab the first item
+            # To make sure there's not multiple matching items we'll make sure the length is not >1
+            logger.exception("Multiple files in table matched in the download manifest")
+        new_index[i] = ind[0]
+        tic_df.index = new_index
+    tic_df.sort_index()
+
+    return tic_df
+
+
 def create_target_list(
     user_df,
     write_file=True,
     filename="target_list.csv",
     include_questionable_crossmatch=True,
 ):
-    """_summary_
+    """Takes a dataframe of target information  and writes an returns an ark-compatible target-list
+    with optional file-write in csv format.
+    If a CSV is supplied, it should be pandas readable with a column header to provide column names,
+        with the names as state below
+
+    The input dataframe requires EITHER:
+        - RA, DEC and optionally Tmag
+        - TIC ID
+    If a TIC is supplied, the supplied information that is in the TIC catalog will be over-written
+
+    OPTIONAL Columns can be supplied,  are:
+        - name : The common name of the object (string or blank, Default blank)
+        - extended: Is this an exended object? (Y/N,  Default N)
+        - special_handling : Does this object require special handling? (Y/N Default N)
+        - 20s_request : IS
+        - swift_request : IF THIS IS FOR A TESS-SWIFT JOINT PROPOSAL, THE Swift Exposure time in ks.
+            - (blank for non-joint proposals, int or float for joint proposals, Default blank)
+        - nicer_request : IF THIS IS FOR A TESS-NICER JOINT PROPOSAL, THE NICER Exposure time in ks.
+            - (blank for non-joint proposals, int or float for joint proposals, Default blank)
+        - remarks : user supplied notes (string or blank, Default blank.)
+
+    We parse the input text file for required and optional columns assuming they will be labeled as above.
+    We attempt a minimal standard disambiguation of the input file/DataFrame, see RENAME_OPTIONS and TARGETLIST_OPTIONS
+    If an ra, dec (and optionally but recommended Tmag) is supplied, we attempt a crossmatch with the TIC.
+        - a diagnostic will be added to the remarks column
+        - tic/ra/dec/pmra/pmdec/tmag will be filled from the TIC with the crossmatch
+    If a tic is supplied, ra/dec/pmra/pmdec/tmag from the input will be ignored
+        - the values for these columns in the output will be populated from the TIC
+    Warnings will be raised for optional columns that are not supplied.
+    For these Columns a sensible default will be used, see TARGETLIST_OPTIONAL_TYPES
+    A dataframe containing ALL columns will be returned.  This can be optionally written to an ARK-compatible csv file.
+
+    Required Columns Returned:
+        -   TIC ID (if available)
+        -   Right Ascension (decimal degrees)
+        -   Declination (decimal degrees)
+        -   Proper motion in Right Ascension (mas/yr)
+        -   Proper motion in Declination (mas/yr)
+        -   TESS mag
+
+    Optional Columns Returned with default:
+        -   Common name of target
+        -   Extended flag (Is this S/G?  do we want to auto set this?)
+        -   Special handling flag
+        -   20-second cadence flag
+        -   Swift time request (ksec)
+        -   Nicer time request (ksec)
+        -   Remarks
+
 
     Parameters
     ----------
@@ -362,6 +424,7 @@ def create_target_list(
     DataFrame
         Dataframe containing the output TargetList
     """
+
     # original _parse_dataframe downselects user colums.  This is usefull for filling tics but problematic for target lists
     # we'll differentiate here and not modify parse to preserve current functionality.  WE could modify # TODO
 
@@ -371,45 +434,24 @@ def create_target_list(
     input_df = _parse_dataframe(user_df)
 
     new_dfs = []
-    if input_df.tic.isnull().any():
+    missing_tics = input_df.tic.isnull().any()
+    if missing_tics:
         ticless = input_df.loc[input_df.tic.isnull()]
-        new_dfs.append(
-            fill_tics(
-                ticless,
-                parse_input=False,
-                include_questionable_crossmatch=include_questionable_crossmatch,
-            )
+        new_tics = fill_tics(
+            ticless,
+            parse_input=False,
         )
+        new_dfs.append(new_tics[OUTPUT_COLUMNS])
+
     if input_df.tic.notnull().any():
         ticfull = input_df.loc[input_df.tic.notnull()]
         if (ticfull.ra.notnull().any()) or (ticfull.dec.notnull().any()):
             logger.warning(
                 "TIC and ra/dec supplied: ignoring RA, DEC and using TIC to construct target list"
             )
-        # This should work for "TIC XXX" "XXX" XXX
-        # TODO Test - I think TIC XXX might break do to the need to re-sort indices on TIC, check?
+
         tic_df = query_id(ticfull.tic.astype(int).to_list(), output_catalog="tic")
-
-        # TODO lksearch.catalog.search.query_id returns items in a different order than input
-        # PR should go in to fix this, in the mean time, sort this list.
-        new_index = np.zeros(len(tic_df))
-        # astroquery does not return files in the same order they are delivered
-        # We'll match the files downloaded here and re-create the index
-        for i in range(len(new_index)):
-            loc = ticfull["tic"].astype(int) == tic_df.iloc[i]["TIC"].astype(int)
-            ind = ticfull.index[loc]
-            ind = np.atleast_1d(ind)
-            if len(ind) > 1:
-                # Numpy deprecation warning - indexing with a 1 element array
-                # For safety we'll make sure everything is at least a 1 element array and then grab the first item
-                # To make sure there's not multiple matching items we'll make sure the length is not >1
-                logger.exception(
-                    "Multiple files in table matched in the download manifest"
-                )
-            new_index[i] = ind[0]
-            tic_df.index = new_index
-        tic_df.sort_index()
-
+        tic_df = _sort_tic_df(ticfull, tic_df)
         tic_df = _parse_dataframe(tic_df)
         new_dfs.append(tic_df[OUTPUT_COLUMNS])
 
@@ -429,6 +471,7 @@ def create_target_list(
         col_match = [c.lower().strip() in item for c in cols]
         if np.any(col_match):
             targetlist_df[key] = user_df[user_df.columns[col_match]]
+            # These keys should be "Y/N" so lets validate
             if key in ["extended", "special_handling", "20s_request"]:
                 targetlist_df[key] = targetlist_df[key].str.strip().str.upper()
 
@@ -437,26 +480,20 @@ def create_target_list(
                 f"`{key}` not in input dataframe - assuming default of {TARGETLIST_DEFAULTS[key]}"
             )  # Use a default key value
             targetlist_df[key] = TARGETLIST_DEFAULTS[key]
+        # add crossmatch parameters from fill_tics to the final remarks section
+        if (key == "remarks") and (missing_tics):
+            for row in new_tics.iterrows():
+                if pd.isnull(targetlist_df.loc[row[0], key]):
+                    targetlist_df.loc[row[0], key] = row[1]["xmatch"]
+                else:
+                    targetlist_df.loc[row[0], key] = (
+                        targetlist_df.loc[row[0], key] + row[1]["xmatch"]
+                    )
 
     # flake8 complained
     targetlist_df = _validate_df(targetlist_df)
 
     if write_file:
-        # required_columns = TIC_COLUMNS
-        # required_keys = [col in targetlist_df.keys() for col in required_columns]
-        # print(required_keys)
-        # if any(required_keys):
-        #    logger.error(
-        #        f"Missing Required Columns for a valid target list in Output DataFrame: {required_columns[~required_keys]}"
-        #    )
-        # optional_columns = TARGETLIST_OPTIONS.keys()
-        # optional_keys = [col in targetlist_df.keys() for col in optional_columns]
-        # print(optional_keys)
-        # if any(not optional_keys):
-        #    logger.error(
-        #        f"Missing Optional Column (which should have been added) for a valid target list
-        #           in Output DataFrame: {optional_columns[~optional_keys]}"
-        #    )
         targetlist_df.to_csv(filename, index=False)
 
     return targetlist_df
