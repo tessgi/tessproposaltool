@@ -510,7 +510,7 @@ def create_target_list(
         # add crossmatch parameters from fill_tics to the final remarks section
         if (key == "remarks") and (missing_tics):
             for row in new_tics.iterrows():
-                crossmatch_string = f"{row[1]["xmatch"]}"
+                crossmatch_string = f"{row[1]['xmatch']}"
                 if pd.isnull(targetlist_df.loc[row[0], key]):
                     targetlist_df.loc[row[0], key] = crossmatch_string
                 else:
