@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
+import pytest
+
 
 from tessproposaltool import PACKAGEDIR, fill_tics, get_logger, create_target_list
-from tessproposaltool.tpt import _parse_dataframe
+from tessproposaltool.tpt import _parse_dataframe, _add_xmatch_column
 
 logger = get_logger()
 logger.setLevel("DEBUG")
@@ -11,7 +13,7 @@ testdir = "/".join([*PACKAGEDIR.split("/")[:-2], "tests", "data"]) + "/"
 
 
 def test_parse():
-    df = pd.read_csv(testdir + "test1.csv")
+    df = pd.read_csv(testdir + "test_single_radec.csv")
     new_df = _parse_dataframe(df)
     # we do not require or expect a pmra/pmdec to be supplied
     assert np.in1d(
@@ -21,7 +23,7 @@ def test_parse():
 
 
 def test_fill():
-    df = pd.read_csv(testdir + "test1.csv")
+    df = pd.read_csv(testdir + "test_single_radec.csv")
     new_df = fill_tics(df)
     assert new_df.loc[0, "tic"] == 252969141.0
     df.loc[0, "tmag"] = 18.0
@@ -30,7 +32,7 @@ def test_fill():
 
 
 def test_fill_larger():
-    df = pd.read_csv(testdir + "test2.csv")
+    df = pd.read_csv(testdir + "test_radec_long.csv")
     new_df = _parse_dataframe(df)
     # we do not require or expect a pmra/pmdec to be supplied
     assert np.in1d(
@@ -49,7 +51,7 @@ def test_inputs():
     # we have the right number of responses
     # the responses are not null
     # they are returned in the sanme order as the input
-    files = ["test3.csv", "test4.csv", "test5.csv"]
+    files = ["test_radec_only.csv", "test_tic_only.csv", "test_mix_radectic.csv"]
 
     def test_file(file):
         true_ticlist = [245701221, 5121803, 149605432, 462915110, 459811015, 466105108]
@@ -75,7 +77,7 @@ def test_inputs():
 
 
 def test_optional_columns():
-    testfile = testdir + "test6.csv"
+    testfile = testdir + "test_optional_column.csv"
 
     optional_columns = [
         "name",
@@ -102,3 +104,31 @@ def test_optional_columns():
     assert test_df.name.isnull().all()
     assert test_df.swift_request.isnull().all()
     assert test_df.nicer_request.isnull().all()
+
+
+def test_input_edge():
+    with pytest.raises(ValueError):
+        _parse_dataframe(testdir + "test_no_header.csv")
+    with pytest.raises(UserWarning):
+        _parse_dataframe(testdir + "test_empty.csv")
+    nonsense = create_target_list(testdir + "test_nonsense_col.csv")
+    assert "blah" not in nonsense.columns
+
+
+def test_LargeSep_Warning():
+    from tessproposaltool import OUTPUT_COLUMNS
+    from tessproposaltool import TIC_COLUMNS
+
+    df = pd.read_csv(testdir + "test_mix_radectic.csv")
+    new_df = create_target_list(df)
+    tic_df = new_df[OUTPUT_COLUMNS]
+    # for item in zip(TIC_COLUMNS, OUTPUT_COLUMNS):
+    #    tic_df[item[0]] = tic_df[item[1]]
+    tic_df = tic_df.rename(columns=dict(zip(OUTPUT_COLUMNS, TIC_COLUMNS)))
+    tic_df["sep"] = [3, 3, 0.5, 0.5, 0.5, 0.5]
+    tic_df["weight"] = [0.1] * 6
+    tic_df["mweight"] = [0.1] * 6
+    test_df = _add_xmatch_column(new_df, tic_df)
+    assert "WARNING" in test_df.loc[1, "xmatch"]
+    assert "WARNING" not in test_df.loc[3, "xmatch"]
+    assert "Crossmatch Parameters: " in new_df.loc[1, "remarks"]

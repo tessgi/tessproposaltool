@@ -218,9 +218,40 @@ def _parse_dataframe(input):
                 logger.debug(f"`{key}` not in input dataframe.")
         df = input.copy()
         df[list(set(list(RENAME_OPTIONS.keys())) - set(renamed_cols))] = np.nan
-        return df.rename(columns=rename_dict)[list(RENAME_OPTIONS.keys())].astype(float)
+        df = df.rename(columns=rename_dict)[list(RENAME_OPTIONS.keys())].astype(float)
     else:
         raise ValueError("Can not parse input.")
+
+    validate_file = all(df.tic.notnull() | (df.ra.notnull() & df.dec.notnull()))
+    if not (validate_file):
+        raise ValueError(
+            "Can't find a tic or ra/dec for all rows in the input.  Do you have a header?"
+        )
+    if len(df) == 0:
+        logger.warning("Length of parsed file is zero - no data found")
+        raise UserWarning
+    return df
+
+
+def _add_xmatch_column(df, tic_df):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=SettingWithCopyWarning)
+        df.loc[tic_df.index, OUTPUT_COLUMNS] = np.asarray(tic_df[TIC_COLUMNS])
+        for row in tic_df.iterrows():
+            sep_str = f"separation: {row[1]['sep']}"
+            weight_str = f"weight: {row[1]['weight']}"
+            mweight_str = f"mweight:  {row[1]['mweight']} | "
+            crossmatch_string = (
+                "Crossmatch Parameters: " + sep_str + weight_str + mweight_str
+            )
+
+            if row[1]["sep"] >= 3:
+                logger.warning("WARNING: TIC Crossmatch Uncertain")
+                crossmatch_string = (
+                    "WARNING: TIC Crossmatch Uncertain | " + crossmatch_string
+                )
+            df.loc[row[0], "xmatch"] = crossmatch_string
+    return df
 
 
 def fill_tics(dataframe, concurrency=5, parse_input=True):
@@ -283,7 +314,6 @@ def fill_tics(dataframe, concurrency=5, parse_input=True):
                     tic_df = pd.concat([tic_df.dropna(subset=["TIC"]), ndf])
                 newfilled = (~tic_df["TIC"].isna()).sum()
 
-    # TODO include_questionable_crossmatch should be processed somewhere in here
     # Radius = 2 pixel
     iterate(50, 2)
     # Radius = 4 pixel
@@ -293,13 +323,10 @@ def fill_tics(dataframe, concurrency=5, parse_input=True):
     # This was throwing a setting with copy warning for me,
     # but this is using loc as per best practice and seems to be working
     # so catching & ignoring for now
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=SettingWithCopyWarning)
-        df.loc[tic_df.index, OUTPUT_COLUMNS] = np.asarray(tic_df[TIC_COLUMNS])
-        for row in tic_df.iterrows():
-            df.loc[row[0], "xmatch"] = (
-                f"Crossmatch Parameters: separation: {row[1]['sep']} weight: {row[1]['weight']} | mweight:  {row[1]['mweight']}"
-            )
+
+    # broke this out so we could test
+    df = _add_xmatch_column(df, tic_df)
+
     logger.stop_spinner()
     return df
 
@@ -483,11 +510,12 @@ def create_target_list(
         # add crossmatch parameters from fill_tics to the final remarks section
         if (key == "remarks") and (missing_tics):
             for row in new_tics.iterrows():
+                crossmatch_string = f"{row[1]["xmatch"]}"
                 if pd.isnull(targetlist_df.loc[row[0], key]):
-                    targetlist_df.loc[row[0], key] = row[1]["xmatch"]
+                    targetlist_df.loc[row[0], key] = crossmatch_string
                 else:
                     targetlist_df.loc[row[0], key] = (
-                        targetlist_df.loc[row[0], key] + row[1]["xmatch"]
+                        targetlist_df.loc[row[0], key] + crossmatch_string
                     )
 
     # flake8 complained
