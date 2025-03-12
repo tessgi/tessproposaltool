@@ -298,7 +298,7 @@ def fill_tics(dataframe, concurrency=5, parse_input=True):
         df.loc[tic_df.index, OUTPUT_COLUMNS] = np.asarray(tic_df[TIC_COLUMNS])
         for row in tic_df.iterrows():
             df.loc[row[0], "xmatch"] = (
-                f"Crossmatch Parameters: separation: {row[1]["sep"]} weight: {row[1]["weight"]} | mweight:  {row[1]["mweight"]}"
+                f"Crossmatch Parameters: separation: {row[1]['sep']} weight: {row[1]['weight']} | mweight:  {row[1]['mweight']}"
             )
     logger.stop_spinner()
     return df
