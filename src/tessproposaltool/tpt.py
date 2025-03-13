@@ -246,7 +246,9 @@ def _add_xmatch_column(df, tic_df):
             )
 
             if row[1]["sep"] >= 3:
-                logger.warning("WARNING: TIC Crossmatch Uncertain")
+                logger.warning(
+                    f"WARNING: TIC Crossmatch Uncertain for TIC {row[1]["TIC"]} - see remarks column"
+                )
                 crossmatch_string = (
                     "WARNING: TIC Crossmatch Uncertain | " + crossmatch_string
                 )

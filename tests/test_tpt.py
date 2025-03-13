@@ -118,17 +118,24 @@ def test_input_edge():
 def test_LargeSep_Warning():
     from tessproposaltool import OUTPUT_COLUMNS
     from tessproposaltool import TIC_COLUMNS
+    from contextlib import redirect_stdout
+    import io
 
     df = pd.read_csv(testdir + "test_mix_radectic.csv")
     new_df = create_target_list(df)
     tic_df = new_df[OUTPUT_COLUMNS]
-    # for item in zip(TIC_COLUMNS, OUTPUT_COLUMNS):
-    #    tic_df[item[0]] = tic_df[item[1]]
+
     tic_df = tic_df.rename(columns=dict(zip(OUTPUT_COLUMNS, TIC_COLUMNS)))
     tic_df["sep"] = [3, 3, 0.5, 0.5, 0.5, 0.5]
     tic_df["weight"] = [0.1] * 6
     tic_df["mweight"] = [0.1] * 6
-    test_df = _add_xmatch_column(new_df, tic_df)
+
+    f = io.StringIO()
+    with redirect_stdout(f):
+        test_df = _add_xmatch_column(new_df, tic_df)
+    s = f.getvalue()
+
     assert "WARNING" in test_df.loc[1, "xmatch"]
+    assert str(tic_df.loc[1, "TIC"]) in s
     assert "WARNING" not in test_df.loc[3, "xmatch"]
     assert "Crossmatch Parameters: " in new_df.loc[1, "remarks"]
