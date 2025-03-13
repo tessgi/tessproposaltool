@@ -503,8 +503,11 @@ def create_target_list(
                 targetlist_df[key] = targetlist_df[key].str.strip().str.upper()
 
         else:
+            default = TARGETLIST_DEFAULTS[key]
+            if default is pd.NA:
+                default = "null"
             logger.warning(
-                f"`{key}` not in input dataframe - assuming default of {TARGETLIST_DEFAULTS[key]}"
+                f"`{key}` not found in input dataframe - assuming: {default}"
             )  # Use a default key value
             targetlist_df[key] = TARGETLIST_DEFAULTS[key]
         # add crossmatch parameters from fill_tics to the final remarks section
