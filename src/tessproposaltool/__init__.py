@@ -12,7 +12,7 @@ from rich.logging import RichHandler  # noqa: E402
 
 PACKAGEDIR = os.path.dirname(os.path.abspath(__file__))
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 def get_logger():
