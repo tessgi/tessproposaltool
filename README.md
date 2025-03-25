@@ -30,10 +30,12 @@ ra,dec,tmag
 To do this inside Python you can use
 
 ```python
-from tessproposaltool import fill_tics
+from tessproposaltool import create_target_list
 
 # read in your radecs, or convert them into a pandas dataframe
 RA, Dec, Tmag = ..., ..., ...
 df = pd.DataFrame(np.asarray([RA, Dec, Tmag]).T, columns=['ra', 'dec', 'tmag'])
-new_df = fill_tics(df)
+new_df = create_target_list(df)
 ```
+
+A tutorial demonstrating the above function can be found in <a href="https://github.com/tessgi/tessproposaltool/blob/main/tutorials/CreateProposalTargetList.ipynb">tutorials/CreateProposalTargetList.ipynb</a>. 
