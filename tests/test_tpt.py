@@ -137,4 +137,4 @@ def test_LargeSep_Warning():
     assert "WARNING" in test_df.loc[1, "xmatch"]
     assert str(tic_df.loc[1, "TIC"]) in s
     assert "WARNING" not in test_df.loc[3, "xmatch"]
-    # assert "Crossmatch Parameters: " in new_df.loc[1, "remarks"]
+    assert "Crossmatch Parameters: " in new_df.loc[1, "remarks"]

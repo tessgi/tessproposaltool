@@ -234,14 +234,16 @@ def _add_xmatch_column(df):
             sep_str = f"separation: {row[1]['sep']}"
             weight_str = f"weight: {row[1]['weight']}"
             mweight_str = f"mweight:  {row[1]['mweight']}"
-            crossmatch_string = "|".join([sep_str, weight_str, mweight_str])
+            crossmatch_string = "Crossmatch Parameters: " + "|".join(
+                [sep_str, weight_str, mweight_str]
+            )
 
             if row[1]["sep"] >= 3:
                 logger.warning(
                     f"WARNING: TIC Crossmatch Uncertain for TIC {row[1]['TIC']} - see remarks column"
                 )
                 crossmatch_string = (
-                    "WARNING: TIC Crossmatch Uncertain | " + crossmatch_string
+                    "WARNING: TIC Crossmatch Uncertain " + crossmatch_string
                 )
             df.loc[row[0], "xmatch"] = crossmatch_string
     return df.drop(["sep", "mweight", "weight"], axis="columns")
