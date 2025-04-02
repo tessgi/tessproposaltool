@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-
-from tessproposaltool import PACKAGEDIR, fill_tics, get_logger, create_target_list
-from tessproposaltool.tpt import _parse_dataframe, _add_xmatch_column
+from tessproposaltool import PACKAGEDIR, create_target_list, fill_tics, get_logger
+from tessproposaltool.tpt import _add_xmatch_column, _parse_dataframe
 
 logger = get_logger()
 logger.setLevel("DEBUG")
@@ -116,10 +115,10 @@ def test_input_edge():
 
 
 def test_LargeSep_Warning():
-    from tessproposaltool import OUTPUT_COLUMNS
-    from tessproposaltool import TIC_COLUMNS
-    from contextlib import redirect_stdout
     import io
+    from contextlib import redirect_stdout
+
+    from tessproposaltool import OUTPUT_COLUMNS, TIC_COLUMNS
 
     df = pd.read_csv(testdir + "test_mix_radectic.csv")
     new_df = create_target_list(df)
@@ -132,7 +131,7 @@ def test_LargeSep_Warning():
 
     f = io.StringIO()
     with redirect_stdout(f):
-        test_df = _add_xmatch_column(new_df, tic_df)
+        test_df = _add_xmatch_column(tic_df)
     s = f.getvalue()
 
     assert "WARNING" in test_df.loc[1, "xmatch"]

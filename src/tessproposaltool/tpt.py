@@ -4,20 +4,15 @@ import argparse
 import asyncio
 import os
 import tempfile
-
+import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.errors import SettingWithCopyWarning
-
 from astropy.io.votable import from_table
 from astropy.table import Table
 from astroquery.utils.tap.core import TapPlus
-
 from lksearch.catalogsearch import query_id
-
-import warnings
-
+from pandas.errors import SettingWithCopyWarning
 
 from . import _sync_call  # noqa
 from . import get_logger
@@ -116,13 +111,13 @@ async def _xmatch_chunk(dataframe, task_number, radius=2, semaphore=None):
     tap = TapPlus(url="http://TAPVizieR.u-strasbg.fr/TAPVizieR/tap")
     query = """
         SELECT tic.tic, tic.RAJ2000 as RA, tic.DEJ2000 as DEC, tic.pmRA, tic.pmDE as pmDEC, tic.Tmag, tic.dist, tic.teff, 
-        tic.Disp as disposition, tic.m_TIC as duplicate_id, tic.plx, christina.index, christina.ra, christina.dec, christina.tmag,
+        tic.Disp as disposition, tic.m_TIC as duplicate_id, tic.plx, tab.index, tab.ra, tab.dec, tab.tmag,
         (DISTANCE(
           POINT('ICRS', tic.RAJ2000, tic.DEJ2000),
-          POINT('ICRS', christina.ra, christina.dec)) * 3600/21) + 0.0000001 as sep,
-        POWER(10, ABS(christina.tmag - tic.Tmag) * -0.4) as mweight
-        FROM "IV/39/tic82" as tic, TAP_UPLOAD.table_test_{0} AS christina
-        WHERE 1=CONTAINS(POINT('ICRS',tic.RAJ2000,tic.DEJ2000), CIRCLE('ICRS',christina.ra, christina.dec, {1} * 21/3600.)) 
+          POINT('ICRS', tab.ra, tab.dec)) * 3600/21) + 0.0000001 as sep,
+        POWER(10, ABS(tab.tmag - tic.Tmag) * -0.4) as mweight
+        FROM "IV/39/tic82" as tic, TAP_UPLOAD.table_test_{0} AS tab
+        WHERE 1=CONTAINS(POINT('ICRS',tic.RAJ2000,tic.DEJ2000), CIRCLE('ICRS',tab.ra, tab.dec, {1} * 21/3600.)) 
         ORDER BY index
     """
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -233,16 +228,14 @@ def _parse_dataframe(input):
     return df
 
 
-def _add_xmatch_column(df, tic_df):
+def _add_xmatch_column(df):
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=SettingWithCopyWarning)
-        df.loc[tic_df.index, OUTPUT_COLUMNS] = np.asarray(tic_df[TIC_COLUMNS])
-        for row in tic_df.iterrows():
+        for row in df.iterrows():
             sep_str = f"separation: {row[1]['sep']}"
             weight_str = f"weight: {row[1]['weight']}"
-            mweight_str = f"mweight:  {row[1]['mweight']} | "
-            crossmatch_string = (
-                "Crossmatch Parameters: " + sep_str + weight_str + mweight_str
+            mweight_str = f"mweight:  {row[1]['mweight']}"
+            crossmatch_string = "Crossmatch Parameters: " + "|".join(
+                [sep_str, weight_str, mweight_str]
             )
 
             if row[1]["sep"] >= 3:
@@ -250,10 +243,10 @@ def _add_xmatch_column(df, tic_df):
                     f"WARNING: TIC Crossmatch Uncertain for TIC {row[1]['TIC']} - see remarks column"
                 )
                 crossmatch_string = (
-                    "WARNING: TIC Crossmatch Uncertain | " + crossmatch_string
+                    "WARNING: TIC Crossmatch Uncertain " + crossmatch_string
                 )
             df.loc[row[0], "xmatch"] = crossmatch_string
-    return df
+    return df.drop(["sep", "mweight", "weight"], axis="columns")
 
 
 def fill_tics(dataframe, concurrency=5, parse_input=True):
@@ -290,7 +283,7 @@ def fill_tics(dataframe, concurrency=5, parse_input=True):
         logger.debug("All TICs specified.")
         return df
     logger.debug(f"{len(df)} missing TICs.")
-    logger.start_spinner("Fixing missing TICs...")
+    # logger.start_spinner("Fixing missing TICs...")
 
     tic_df = _sync_call(
         xmatch, dataframe=tic_df, max_entries=40, radius=2, concurrency=concurrency
@@ -327,9 +320,15 @@ def fill_tics(dataframe, concurrency=5, parse_input=True):
     # so catching & ignoring for now
 
     # broke this out so we could test
-    df = _add_xmatch_column(df, tic_df)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=SettingWithCopyWarning)
+        df.loc[
+            tic_df.index, np.hstack([OUTPUT_COLUMNS, "sep", "mweight", "weight"])
+        ] = np.asarray(tic_df[np.hstack([TIC_COLUMNS, "sep", "mweight", "weight"])])
 
-    logger.stop_spinner()
+    # df = _add_xmatch_column(df)
+
+    # logger.stop_spinner()
     return df
 
 
@@ -470,6 +469,7 @@ def create_target_list(
             ticless,
             parse_input=False,
         )
+        new_tics = _add_xmatch_column(new_tics)
         new_dfs.append(new_tics[OUTPUT_COLUMNS])
 
     if input_df.tic.notnull().any():
