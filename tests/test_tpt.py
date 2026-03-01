@@ -84,7 +84,7 @@ def test_optional_columns():
         "special_handling",
         "20s_request",
         "swift_request",
-        #"nicer_request",
+        # "nicer_request",
         "remarks",
     ]
 
@@ -102,7 +102,7 @@ def test_optional_columns():
 
     assert test_df.name.isnull().all()
     assert test_df.swift_request.isnull().all()
-    #assert test_df.nicer_request.isnull().all()
+    # assert test_df.nicer_request.isnull().all()
 
 
 def test_input_edge():
