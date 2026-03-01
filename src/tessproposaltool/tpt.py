@@ -17,7 +17,7 @@ from pandas.errors import SettingWithCopyWarning
 from . import _sync_call  # noqa
 from . import get_logger
 
-#RAH - removal of nicer from tool 03-01-2026
+# RAH - removal of nicer from tool 03-01-2026
 
 logger = get_logger()
 # columns to return from the fill_tics crossmatch
@@ -60,7 +60,7 @@ TARGETLIST_OPTIONS = {
         "20scadence",
     ],
     "swift_request": ["swift_request", "swift", "swiftrequest", "swift-request"],
-    #"nicer_request": ["nicer_request", "nicer", "nicerrequest", "nicer-request"],
+    # "nicer_request": ["nicer_request", "nicer", "nicerrequest", "nicer-request"],
     "remarks": ["remarks", "comments", "notes"],
 }
 # default values for optional columns if they are not specified
@@ -70,7 +70,7 @@ TARGETLIST_DEFAULTS = {
     "special_handling": "N",
     "20s_request": "N",
     "swift_request": pd.NA,
-    #"nicer_request": pd.NA,
+    # "nicer_request": pd.NA,
     "remarks": pd.NA,
 }
 
@@ -93,7 +93,7 @@ TARGETLIST_OPTIONAL_TYPES = {
     "special_handling": str,
     "20s_request": str,
     "swift_request": float,
-    #"nicer_request": float,
+    # "nicer_request": float,
     "remarks": str,
 }
 
@@ -405,7 +405,7 @@ def create_target_list(
         - 20s_request : IS
         - swift_request : IF THIS IS FOR A TESS-SWIFT JOINT PROPOSAL, THE Swift Exposure time in ks.
             - (blank for non-joint proposals, int or float for joint proposals, Default blank)
-        #- nicer_request : IF THIS IS FOR A TESS-NICER JOINT PROPOSAL, THE NICER Exposure time in ks.
+        # - nicer_request : IF THIS IS FOR A TESS-NICER JOINT PROPOSAL, THE NICER Exposure time in ks.
         #    - (blank for non-joint proposals, int or float for joint proposals, Default blank)
         - remarks : user supplied notes (string or blank, Default blank.)
 
