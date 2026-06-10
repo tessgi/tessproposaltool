@@ -89,3 +89,4 @@ def _sync_call(func, *args, **kwargs):
 
 
 from .tpt import *  # noqa: E402, F401, F403
+from .tr import *
